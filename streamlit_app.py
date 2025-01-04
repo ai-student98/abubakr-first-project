@@ -2,112 +2,167 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV
+import plotly.express as px
 
 st.title('😁 Abubakr First APP')
 
-st.info('This is app builds a machine learning model!')
+st.info('This app builds a machine learning model to classify Penguin species!')
+
+# ---------------------------
+# 1) Load data
+# ---------------------------
+df = pd.read_csv('https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv')
 
 with st.expander('Data'):
-  df = pd.read_csv('https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv')  
-  st.write('**X**')
-  X_raw = df.drop('species', axis=1)
-  X_raw
+    st.write('**X**')
+    X_raw = df.drop('species', axis=1)
+    st.dataframe(X_raw)
 
-  st.write('**y**')
-  y_raw = df.species
-  y_raw
+    st.write('**y**')
+    y_raw = df.species
+    st.dataframe(y_raw)
 
-# Input features
+# ---------------------------
+# 2) Input features (sidebar)
+# ---------------------------
 with st.sidebar:
-  st.header('Input features')
-  island = st.selectbox('Island', ('Biscoe', 'Dream', 'Torgersen'))
-  bill_length_mm = st.slider('Bill length (mm)', 32.1, 59.6, 43.9)
-  bill_depth_mm = st.slider('Bill depth (mm)', 13.1, 21.5, 17.2)
-  flipper_length_mm = st.slider('Flipper length (mm)', 172.0, 231.0, 201.0)
-  body_mass_g = st.slider('Body mass (g)', 2700.0, 6300.0, 4207.0)
-  gender = st.selectbox('Gender', ('male', 'female'))
+    st.header('Input features')
+    island = st.selectbox('Island', ('Biscoe', 'Dream', 'Torgersen'))
+    bill_length_mm = st.slider('Bill length (mm)', 32.1, 59.6, 43.9)
+    bill_depth_mm = st.slider('Bill depth (mm)', 13.1, 21.5, 17.2)
+    flipper_length_mm = st.slider('Flipper length (mm)', 172.0, 231.0, 201.0)
+    body_mass_g = st.slider('Body mass (g)', 2700.0, 6300.0, 4207.0)
+    gender = st.selectbox('Gender', ('male', 'female'))
 
 # Create a DataFrame for the input features
-  data = {'island': island,
-          'bill_length_mm': bill_length_mm,
-          'bill_depth_mm': bill_depth_mm,
-          'flipper_length_mm': flipper_length_mm,
-          'body_mass_g': body_mass_g,
-          'sex': gender}
-  input_df = pd.DataFrame(data, index=[0])
-  input_penguins = pd.concat([input_df, X_raw], axis=0)
+data = {
+    'island': island,
+    'bill_length_mm': bill_length_mm,
+    'bill_depth_mm': bill_depth_mm,
+    'flipper_length_mm': flipper_length_mm,
+    'body_mass_g': body_mass_g,
+    'sex': gender
+}
+input_df = pd.DataFrame(data, index=[0])
+input_penguins = pd.concat([input_df, X_raw], axis=0)
 
+# ---------------------------
+# 3) Quick data visualization
+# ---------------------------
+# Example: a simple scatter plot of Bill Length vs. Bill Depth colored by Island
+st.subheader('Data Visualization')
+fig = px.scatter(
+    df,
+    x='bill_length_mm',
+    y='bill_depth_mm',
+    color='island',
+    title='Bill Length vs. Bill Depth by Island'
+)
+st.plotly_chart(fig)
+
+# Another example: distribution of body mass
+fig2 = px.histogram(
+    df, 
+    x='body_mass_g', 
+    nbins=30, 
+    title='Distribution of Body Mass'
+)
+st.plotly_chart(fig2)
+
+# ---------------------------
+# 4) Display input features
+# ---------------------------
 with st.expander('Input features'):
-  st.write('**Input penguin**')
-  input_df
-  st.write('**Combined penguins data**')
-  input_penguins
+    st.write('**Input penguin**')
+    st.dataframe(input_df)
+    st.write('**Combined penguins data** (input row + original data)')
+    st.dataframe(input_penguins)
 
-# Data preparation
-# Encode X
+# ---------------------------
+# 5) Data preparation (encoding)
+# ---------------------------
 encode = ['island', 'sex']
 df_penguins = pd.get_dummies(input_penguins, prefix=encode)
 
+# Separate the top row (our input) from the rest
 X = df_penguins[1:]
 input_row = df_penguins[:1]
 
-# Encode y
-target_mapper = {'Adelie': 0,
-                 'Chinstrap': 1,
-                 'Gentoo': 2}
+# Encode the target
+target_mapper = {'Adelie': 0, 'Chinstrap': 1, 'Gentoo': 2}
 def target_encode(val):
-  return target_mapper[val]
+    return target_mapper[val]
 
 y = y_raw.apply(target_encode)
 
 with st.expander('Data preparation'):
-  st.write('**Encoded X (input penguin)**')
-  input_row
-  st.write('**Encoded y**')
-  y
+    st.write('**Encoded X (input penguin)**')
+    st.dataframe(input_row)
+    st.write('**Encoded y**')
+    st.write(y)
 
+# ---------------------------
+# 6) Model training with GridSearchCV
+# ---------------------------
+st.subheader('Model Training (Grid Search)')
 
-clf = RandomForestClassifier()
-clf.fit(X, y)
+# Set up a parameter grid. You can expand or adjust these.
+param_grid = {
+    'n_estimators': [50, 100],
+    'max_depth': [None, 5, 10]
+}
 
+# Create the base model
+base_rf = RandomForestClassifier(random_state=42)
 
-## Apply model to make predictions
-prediction = clf.predict(input_row)
-prediction_proba = clf.predict_proba(input_row)
+# Perform grid search
+grid_search = GridSearchCV(base_rf, param_grid, cv=3, scoring='accuracy', n_jobs=-1)
+grid_search.fit(X, y)
 
-df_prediction_proba = pd.DataFrame(prediction_proba)
-df_prediction_proba.columns = ['Adelie', 'Chinstrap', 'Gentoo']
-df_prediction_proba.rename(columns={0: 'Adelie',
-                                 1: 'Chinstrap',
-                                 2: 'Gentoo'})
+best_model = grid_search.best_estimator_
+best_params = grid_search.best_params_
+st.write("**Best Parameters**:", best_params)
 
-# Display predicted species
+# ---------------------------
+# 7) Apply the best model to make predictions
+# ---------------------------
+prediction = best_model.predict(input_row)
+prediction_proba = best_model.predict_proba(input_row)
+
+df_prediction_proba = pd.DataFrame(prediction_proba, columns=['Adelie', 'Chinstrap', 'Gentoo'])
+
+# ---------------------------
+# 8) Display prediction
+# ---------------------------
 st.subheader('Predicted Species')
-st.dataframe(df_prediction_proba,
-             column_config={
-               'Adelie': st.column_config.ProgressColumn(
-                 'Adelie',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-               'Chinstrap': st.column_config.ProgressColumn(
-                 'Chinstrap',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-               'Gentoo': st.column_config.ProgressColumn(
-                 'Gentoo',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-             }, hide_index=True)
-
+st.dataframe(
+    df_prediction_proba,
+    column_config={
+        'Adelie': st.column_config.ProgressColumn(
+            'Adelie',
+            format='%f',
+            width='medium',
+            min_value=0,
+            max_value=1
+        ),
+        'Chinstrap': st.column_config.ProgressColumn(
+            'Chinstrap',
+            format='%f',
+            width='medium',
+            min_value=0,
+            max_value=1
+        ),
+        'Gentoo': st.column_config.ProgressColumn(
+            'Gentoo',
+            format='%f',
+            width='medium',
+            min_value=0,
+            max_value=1
+        ),
+    },
+    hide_index=True
+)
 
 penguins_species = np.array(['Adelie', 'Chinstrap', 'Gentoo'])
-st.success(str(penguins_species[prediction][0]))
+st.success(f"Predicted species: **{penguins_species[prediction][0]}**")
