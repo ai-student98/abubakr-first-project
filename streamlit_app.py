@@ -24,38 +24,27 @@ with col2:
     fig2 = px.scatter(df, x="bill_length_mm", y="flipper_length_mm", color="species", title="Длина клюва vs Длина крыла")
     st.plotly_chart(fig2, use_container_width=True)
 
-class TargetMeanEncoder:
-    def __init__(self):
-        self.maps = {}
-
-    def fit(self, X: pd.DataFrame, y: pd.Series, columns: list):
-        self.maps = {}
-        for col in columns:
-            temp = pd.concat([X[col], y], axis=1)
-            means = temp.groupby(col)['species'].apply(lambda x: x.map({k: i for i, k in enumerate(x.unique())}).mean())
-            self.maps[col] = means.to_dict()
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
-        X_transformed = X.copy()
-        for col, mapping in self.maps.items():
-            X_transformed[col + "_mean"] = X[col].map(mapping).fillna(0.0)
-        return X_transformed.drop(columns=self.maps.keys())
-
-    def fit_transform(self, X: pd.DataFrame, y: pd.Series, columns: list) -> pd.DataFrame:
-        self.fit(X, y, columns)
-        return self.transform(X)
-
 X_raw = df.drop(columns=["species"])
 y = df["species"]
+
+y_numeric, classes = pd.factorize(y)
+
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(X_raw, y, test_size=0.2, random_state=42)
+y_train_numeric = pd.Series(pd.factorize(y_train)[0], index=y_train.index)
 
-encoder = TargetMeanEncoder()
-X_train = encoder.fit_transform(X_train_raw, y_train, ['island', 'sex'])
-X_test = encoder.transform(X_test_raw)
+# TME вручную
+means_island = X_train_raw.join(y_train_numeric).groupby("island")[0].mean()
+means_sex = X_train_raw.join(y_train_numeric).groupby("sex")[0].mean()
 
-for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
-    X_train[col] = X_train_raw[col].values
-    X_test[col] = X_test_raw[col].values
+X_train = X_train_raw.copy()
+X_train["island_mean"] = X_train["island"].map(means_island).fillna(y_train_numeric.mean())
+X_train["sex_mean"] = X_train["sex"].map(means_sex).fillna(y_train_numeric.mean())
+X_train = X_train.drop(columns=["island", "sex"])
+
+X_test = X_test_raw.copy()
+X_test["island_mean"] = X_test["island"].map(means_island).fillna(y_train_numeric.mean())
+X_test["sex_mean"] = X_test["sex"].map(means_sex).fillna(y_train_numeric.mean())
+X_test = X_test.drop(columns=["island", "sex"])
 
 models = {
     'Decision Tree': DecisionTreeClassifier(random_state=42),
@@ -93,10 +82,10 @@ user_df = pd.DataFrame([{
     'flipper_length_mm': flipper_length,
     'body_mass_g': body_mass
 }])
-user_encoded = encoder.transform(user_df)
 
-for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
-    user_encoded[col] = user_df[col].values
+user_df["island_mean"] = user_df["island"].map(means_island).fillna(y_train_numeric.mean())
+user_df["sex_mean"] = user_df["sex"].map(means_sex).fillna(y_train_numeric.mean())
+user_encoded = user_df.drop(columns=["island", "sex"])
 
 st.sidebar.subheader("📈 Результаты предсказания")
 for name, model in models.items():
