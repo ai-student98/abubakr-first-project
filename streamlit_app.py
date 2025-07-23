@@ -18,7 +18,7 @@ def load_data():
 
 df = load_data()
 
-# Показываем случайные 10 строк
+# Случайные строки
 st.subheader("🔎 Случайные 10 строк")
 st.dataframe(df.sample(10), use_container_width=True)
 
@@ -32,18 +32,46 @@ with col2:
     fig2 = px.scatter(df, x="bill_length_mm", y="flipper_length_mm", color="species", title="Длина клюва vs Длина крыла")
     st.plotly_chart(fig2, use_container_width=True)
 
-# Target Mean Encoding
-st.subheader("🧠 Обучение моделей")
-df_encoded = df.copy()
-for col in ['island', 'sex']:
-    means = df_encoded.groupby(col)['species'].apply(lambda x: x.map({k: i for i, k in enumerate(x.unique())}).mean())
-    df_encoded[col + '_mean'] = df_encoded[col].map(means)
-df_encoded.drop(columns=['island', 'sex'], inplace=True)
+# =========================
+# Target Mean Encoder Class
+# =========================
+class TargetMeanEncoder:
+    def __init__(self):
+        self.maps = {}
 
-# Train/Test Split
-X = df_encoded.drop(columns=['species'])
-y = df_encoded['species']
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    def fit(self, X: pd.DataFrame, y: pd.Series, columns: list):
+        self.maps = {}
+        for col in columns:
+            temp = pd.concat([X[col], y], axis=1)
+            means = temp.groupby(col)['species'].apply(lambda x: x.map({k: i for i, k in enumerate(x.unique())}).mean())
+            self.maps[col] = means.to_dict()
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X_transformed = X.copy()
+        for col, mapping in self.maps.items():
+            X_transformed[col + "_mean"] = X[col].map(mapping).fillna(0.0)
+        return X_transformed.drop(columns=self.maps.keys())
+
+    def fit_transform(self, X: pd.DataFrame, y: pd.Series, columns: list) -> pd.DataFrame:
+        self.fit(X, y, columns)
+        return self.transform(X)
+
+# Разделение на фичи и таргет
+X_raw = df.drop(columns=["species"])
+y = df["species"]
+
+# Сплит
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(X_raw, y, test_size=0.2, random_state=42)
+
+# Кодирование категориальных признаков
+encoder = TargetMeanEncoder()
+X_train = encoder.fit_transform(X_train_raw, y_train, ['island', 'sex'])
+X_test = encoder.transform(X_test_raw)
+
+# Добавим остальные числовые признаки
+for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
+    X_train[col] = X_train_raw[col].values
+    X_test[col] = X_test_raw[col].values
 
 # Обучение моделей
 models = {
@@ -65,9 +93,10 @@ for name, model in models.items():
 st.write("### 📋 Сравнение моделей по точности")
 st.table(pd.DataFrame(results))
 
-# Сайдбар — ввод параметров
+# ====== Сайдбар ======
 st.sidebar.header("🔮 Предсказание по параметрам")
 
+# Ввод
 island_input = st.sidebar.selectbox("Остров", df['island'].unique())
 sex_input = st.sidebar.selectbox("Пол", df['sex'].unique())
 bill_length = st.sidebar.slider("Длина клюва (мм)", float(df['bill_length_mm'].min()), float(df['bill_length_mm'].max()), float(df['bill_length_mm'].mean()))
@@ -75,25 +104,25 @@ bill_depth = st.sidebar.slider("Глубина клюва (мм)", float(df['bil
 flipper_length = st.sidebar.slider("Длина крыла (мм)", float(df['flipper_length_mm'].min()), float(df['flipper_length_mm'].max()), float(df['flipper_length_mm'].mean()))
 body_mass = st.sidebar.slider("Масса тела (г)", float(df['body_mass_g'].min()), float(df['body_mass_g'].max()), float(df['body_mass_g'].mean()))
 
-# Target mean encoding на новые данные
-def encode_feature(value, colname):
-    mapping = df.groupby(colname)['species'].apply(lambda x: x.map({k: i for i, k in enumerate(x.unique())}).mean())
-    return mapping.get(value, 0.0)
-
-island_mean = encode_feature(island_input, 'island')
-sex_mean = encode_feature(sex_input, 'sex')
-
-user_data = pd.DataFrame([{
+# Подготовка данных пользователя
+user_df = pd.DataFrame([{
+    'island': island_input,
+    'sex': sex_input,
     'bill_length_mm': bill_length,
     'bill_depth_mm': bill_depth,
     'flipper_length_mm': flipper_length,
-    'body_mass_g': body_mass,
-    'island_mean': island_mean,
-    'sex_mean': sex_mean
+    'body_mass_g': body_mass
 }])
+user_encoded = encoder.transform(user_df)
 
-# Предсказания моделей
-st.sidebar.subheader("Результат предсказания:")
+for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
+    user_encoded[col] = user_df[col].values
+
+# Предсказания
+st.sidebar.subheader("📈 Результаты предсказания")
 for name, model in models.items():
-    prediction = model.predict(user_data)[0]
-    st.sidebar.write(f"**{name} предсказал:** {prediction}")
+    pred_class = model.predict(user_encoded)[0]
+    pred_proba = model.predict_proba(user_encoded)[0]
+    proba_df = pd.DataFrame({'Вид': model.classes_, 'Вероятность': pred_proba})
+    st.sidebar.markdown(f"**{name}: {pred_class}**")
+    st.sidebar.dataframe(proba_df.set_index("Вид"), use_container_width=True)
