@@ -13,7 +13,7 @@ st.write("## Работа с датасетом пингвинов")
 
 # Загрузка данных
 @st.cache_data
-df = pd.read_csv("https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv")
+df = pd.read_csv(r"https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv")
 
 # Случайные строки
 st.subheader("🔎 Случайные 10 строк")
