@@ -6,20 +6,15 @@ from sklearn.metrics import accuracy_score
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 
-# Настройки страницы
 st.set_page_config(page_title="🐧 Penguin Classifier", layout="wide")
 st.title('🐧 Penguin Classifier - Обучение и предсказание')
 st.write("## Работа с датасетом пингвинов")
 
-# Загрузка данных
-@st.cache_data
-df = pd.read_csv(r"https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv")
+df = pd.read_csv("https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv")
 
-# Случайные строки
 st.subheader("🔎 Случайные 10 строк")
 st.dataframe(df.sample(10), use_container_width=True)
 
-# Визуализации
 st.subheader("📊 Визуализация данных")
 col1, col2 = st.columns(2)
 with col1:
@@ -29,9 +24,6 @@ with col2:
     fig2 = px.scatter(df, x="bill_length_mm", y="flipper_length_mm", color="species", title="Длина клюва vs Длина крыла")
     st.plotly_chart(fig2, use_container_width=True)
 
-# =========================
-# Target Mean Encoder Class
-# =========================
 class TargetMeanEncoder:
     def __init__(self):
         self.maps = {}
@@ -53,24 +45,18 @@ class TargetMeanEncoder:
         self.fit(X, y, columns)
         return self.transform(X)
 
-# Разделение на фичи и таргет
 X_raw = df.drop(columns=["species"])
 y = df["species"]
-
-# Сплит
 X_train_raw, X_test_raw, y_train, y_test = train_test_split(X_raw, y, test_size=0.2, random_state=42)
 
-# Кодирование категориальных признаков
 encoder = TargetMeanEncoder()
 X_train = encoder.fit_transform(X_train_raw, y_train, ['island', 'sex'])
 X_test = encoder.transform(X_test_raw)
 
-# Добавим остальные числовые признаки
 for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
     X_train[col] = X_train_raw[col].values
     X_test[col] = X_test_raw[col].values
 
-# Обучение моделей
 models = {
     'Decision Tree': DecisionTreeClassifier(random_state=42),
     'KNN': KNeighborsClassifier()
@@ -90,10 +76,8 @@ for name, model in models.items():
 st.write("### 📋 Сравнение моделей по точности")
 st.table(pd.DataFrame(results))
 
-# ====== Сайдбар ======
 st.sidebar.header("🔮 Предсказание по параметрам")
 
-# Ввод
 island_input = st.sidebar.selectbox("Остров", df['island'].unique())
 sex_input = st.sidebar.selectbox("Пол", df['sex'].unique())
 bill_length = st.sidebar.slider("Длина клюва (мм)", float(df['bill_length_mm'].min()), float(df['bill_length_mm'].max()), float(df['bill_length_mm'].mean()))
@@ -101,7 +85,6 @@ bill_depth = st.sidebar.slider("Глубина клюва (мм)", float(df['bil
 flipper_length = st.sidebar.slider("Длина крыла (мм)", float(df['flipper_length_mm'].min()), float(df['flipper_length_mm'].max()), float(df['flipper_length_mm'].mean()))
 body_mass = st.sidebar.slider("Масса тела (г)", float(df['body_mass_g'].min()), float(df['body_mass_g'].max()), float(df['body_mass_g'].mean()))
 
-# Подготовка данных пользователя
 user_df = pd.DataFrame([{
     'island': island_input,
     'sex': sex_input,
@@ -115,7 +98,6 @@ user_encoded = encoder.transform(user_df)
 for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
     user_encoded[col] = user_df[col].values
 
-# Предсказания
 st.sidebar.subheader("📈 Результаты предсказания")
 for name, model in models.items():
     pred_class = model.predict(user_encoded)[0]
