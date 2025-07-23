@@ -69,6 +69,9 @@ user_input = pd.DataFrame([{
     'body_mass_g': body_mass
 }])
 user_encoded = encoder.transform(user_input)
+for col in ['bill_length_mm', 'bill_depth_mm', 'flipper_length_mm', 'body_mass_g']:
+    user_encoded[col] = user_input[col].values
+user_encoded = user_encoded[X_train_encoded.columns]
 
 st.sidebar.subheader("📈 Результаты предсказания")
 for name, model in models.items():
